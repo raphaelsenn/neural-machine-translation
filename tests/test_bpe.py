@@ -2,7 +2,6 @@ from neuralmt.bpe.bpe import BPETokenizer, get_stats
 
 # WMT14 dataset can be downloaded here:
 # https://www.kaggle.com/datasets/mohamedlotfy50/wmt-2014-english-german
-DATA_FILE = "./wmt14/wmt14_translate_de-en_val.csv"
 VOCAB_SIZE = 512
 VERBOSE = False
 

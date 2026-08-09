@@ -1,5 +1,22 @@
 # Neural Machine Translation
 
+## Architecture
+
+Transformer architecture used in this repository:
+
+<p align="center">
+  <img src="./assets/architecture.png" width="400">
+</p>
+
+<p align="center">
+  <em>
+    Figure 1: Transformer architecture used in this repository, adapted from
+    <a href="https://machinelearningmastery.com/building-a-transformer-model-for-language-translation/">Brownlee</a>.
+  </em>
+</p>
+
+Figure 1 shows 4 layers and grouped-query attention (GQA), while the implementation in this repo uses 6 encoder-decoder layers and multi-head attention (MHA).
+
 ## Usage
 
 The Multi30k German-Englisch Machine Translation dataset can be downloaded here:
@@ -68,12 +85,22 @@ python3 train.py
   <img src="./assets/loss_ppl_en2de.png">
 </p>
 
-<p align="center"> <em>Figure 1: Training, validation loss (left) and perplexity (right) on Multi30k englisch-to-german task.</em> </p>
+<p align="center"> <em>Figure 1: Training, validation loss (left) and perplexity (right) on Multi30k english-to-german task.</em> </p>
 
 
-| Task | Parameters | Cross-Entropy | Perplexity | BLEU |
+<p align="center">
+  <img src="./assets/loss_ppl_de2en.png">
+</p>
+
+<p align="center"> <em>Figure 2: Training, validation loss (left) and perplexity (right) on Multi30k german-to-english task.</em> </p>
+
+
+| Task | Parameters | Perplexity | BLEU |
 |---|---:|---:|---:|---:|
-| English to German (test set) | 48.2M | 1.7394 | 5.6939 | 34.1119 |
+| English to German | 48.2M | 5.6939 | 34.1119 |
+| German to English | 48.2M | 5.4320 | 34.7348 |
+
+<p align="center"> <em>Table 1: Performence on Multi30k test set.</em> </p>
 
 
 ## Citations

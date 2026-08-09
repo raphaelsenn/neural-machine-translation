@@ -4,6 +4,7 @@ https://github.com/openai/gpt-2/blob/master/src/encoder.py,
 and Andrej Karpathy's implementation of bpe in minGPT:
 https://github.com/karpathy/minGPT/blob/master/mingpt/bpe.py
 """
+from __future__ import annotations
 from typing import Dict, Tuple, List
 from collections import defaultdict, Counter
 from collections.abc import Iterable
@@ -142,7 +143,7 @@ class BPETokenizer:
             pickle.dump(self, file)
 
     @classmethod
-    def load(cls, path: str) -> "BPETokenizer":
+    def load(cls, path: str) -> BPETokenizer:
         with open(path, "rb") as file:
             return pickle.load(file)
 

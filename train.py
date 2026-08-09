@@ -3,17 +3,19 @@ from typing import List, Dict
 import torch
 from torch.utils.data import DataLoader
 
-from neuralmt.dataset.multi30k import Multi30kDataset
-from neuralmt.training.trainer import NMTTrainer
-from neuralmt.transformer.nmt import NeuralMachineTranslator
-from neuralmt.bpe.bpe import BPETokenizer
-from neuralmt.evaluation.evaluate import validate_with_bleu
+from neuralmt import (
+    Multi30kDataset,
+    BPETokenizer,
+    NeuralMachineTranslator,
+    NMTTrainer,
+    validate_with_bleu
+)
 
 
 # Tokenizers
 TOKENIZER_FILE = "tokenizer_de_en_bpe_8k.pickle"
 TOKENIZER = BPETokenizer.load(TOKENIZER_FILE)
-LANGUAGE_PAIR = ("en", "de")
+LANGUAGE_PAIR = ("de", "en")
 PAD_TOKEN = TOKENIZER.pad_id     # 7997
 BOS_TOKEN = TOKENIZER.bos_id     # 7998
 EOS_TOKEN = TOKENIZER.eos_id     # 7999
@@ -126,9 +128,6 @@ def main() -> None:
     )
 
     trainer.train(train_loader, val_loader)
-    #model.load_state_dict(torch.load("nmt-33.5M-params.pt", map_location="cpu")) 
-    #model.to(DEVICE)
-    #model.eval()
     test_ce, test_bleu = validate_with_bleu(model, TOKENIZER, test_loader, DEVICE)
     print(f"Cross-entropy on test set: {test_ce:.4f} | BLEU score on test set: {test_bleu:.4f}")
 

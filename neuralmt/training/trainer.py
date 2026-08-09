@@ -6,7 +6,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import ReduceLROnPlateau, LambdaLR, CosineAnnealingLR
+from torch.optim.lr_scheduler import LambdaLR
 
 from torchmetrics.text.perplexity import Perplexity
 
