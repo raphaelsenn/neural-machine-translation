@@ -235,3 +235,4 @@ wmt14
 *.pth
 *.csv
 *.pickle
+demo.py

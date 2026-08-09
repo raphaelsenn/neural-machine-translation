@@ -27,11 +27,11 @@ The Multi30k German-Englisch Machine Translation dataset can be downloaded here:
 
 Download the tokenizer file from:
 
-[tokenizer_de_en_vocab8k.pickle]()
+[tokenizer_de_en_vocab8k.pickle](https://github.com/raphaelsenn/neuralMT/releases/tag/v1.0.0)
 
 Download the pretrained NMT model weights from:
 
-[nmt_en2de_48.2M_vocab8k.pt]()
+[nmt_en2de_48.2M_vocab8k.pt](https://github.com/raphaelsenn/neuralMT/releases/tag/v1.0.0)
 
 ```python
 import torch
@@ -96,7 +96,7 @@ python3 train.py
 
 
 | Task | Parameters | Perplexity | BLEU |
-|---|---:|---:|---:|---:|
+|---|---:|---:|---:|
 | English to German | 48.2M | 5.6939 | 34.1119 |
 | German to English | 48.2M | 5.4320 | 34.7348 |
 
