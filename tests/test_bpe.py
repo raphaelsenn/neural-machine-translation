@@ -1,4 +1,4 @@
-from neuralmt.bpe import BPETokenizer, get_stats
+from neuralmt.bpe.bpe import BPETokenizer, get_stats
 
 # WMT14 dataset can be downloaded here:
 # https://www.kaggle.com/datasets/mohamedlotfy50/wmt-2014-english-german

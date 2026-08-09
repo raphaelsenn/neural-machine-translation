@@ -52,6 +52,9 @@ class BPETokenizer:
         # 36,997 - 36,999 special tokens
         self.vocab = self._build_vocab()    # Learnable parameter of BPE
 
+    def __len__(self) -> int:
+        return len(self.vocab)
+
     def encode(self, text: str) -> List[int]:
         tokens = re.findall(GPT2_SPLIT_PATTERN, text)
         output = []
@@ -67,14 +70,17 @@ class BPETokenizer:
             output.extend(token_idx)
         return output
 
-    def decode(self, tokens: List[int]) -> str:
+    def decode(self, tokens: List[int], skip_special_tokens: bool = False) -> str:
         # tokens_bytes = bytes([self.vocab[token] for token in tokens])
         tokens_bytes = b"".join(self.vocab[token] for token in tokens)
         text = tokens_bytes.decode("utf-8", errors="replace")
+        if skip_special_tokens is True:
+            for special_token in self.special_tokens.keys():
+                text = text.replace(special_token, "")
         return text
 
     def train(self, texts: Iterable[str]) -> None:
-        # Flat representation of all byte-chunks
+        # Flat representation of all byte-chunks (very inefficient - but educational :))
         # E.g. texts = ["Hello world!"]
         # =>   re.findall(GPT2_SPLIT_PATTERN..., texts[0]) = ['Hello', ' world', '!']
         # =>   byte_chunks = [[72, 101, 108, 108, 111], [32, 119, 111, 114, 108, 100], [33]]
@@ -118,6 +124,18 @@ class BPETokenizer:
                 print(report)
 
         self.vocab = self._build_vocab()
+
+    @property
+    def bos_id(self) -> int:
+        return self.special_tokens["<BOS>"]
+
+    @property
+    def eos_id(self) -> int:
+        return self.special_tokens["<EOS>"]
+
+    @property
+    def pad_id(self) -> int:
+        return self.special_tokens["<PAD>"]
 
     def save(self, path: str) -> None:
         with open(path, "wb") as file:

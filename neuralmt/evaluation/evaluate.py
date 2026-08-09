@@ -2,73 +2,132 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from torchtext.data.metrics import bleu_score
-from tokenizers import Tokenizer
+from torchmetrics.text import BLEUScore
+from torchmetrics.text import Perplexity
 
-from neuralmt.dataset.wmt14 import (
-    BOS_TOKEN,
-    EOS_TOKEN,
-    PAD_TOKEN,
-)
-
-
-TOKENIZER_FILE = "wmt14_bpe.json"
-TOKENIZER = Tokenizer.from_file(TOKENIZER_FILE)
+from neuralmt.bpe.bpe import BPETokenizer
+from neuralmt.training.utils import create_causal_mask, create_pad_mask
 
 
 @torch.no_grad()
 def validate(
         model: nn.Module,
-        criterion: nn.Module,
+        tokenizer: BPETokenizer,
+        dataloader: DataLoader,
+        device: torch.device
+) -> float:
+    model.eval()
+
+    pad_id = tokenizer.pad_id
+    criterion = nn.CrossEntropyLoss(ignore_index=pad_id)
+    perplexity = Perplexity(ignore_index=pad_id).to(device)
+
+    n_tokens = 0
+    cross_entropy = 0.0
+
+    for batch in dataloader:
+        src = batch["src"].to(device)  # [B, L]
+        tgt = batch["tgt"].to(device)  # [B, S]
+
+        # Teacher forcing
+        # https://en.wikipedia.org/wiki/Teacher_forcing
+        # https://machinelearningmastery.com/teacher-forcing-for-recurrent-neural-networks/
+        tgt_input = tgt[:, :-1]             # [B, S - 1], [y1, y2, y3, ..., yS-1]
+        tgt_output = tgt[:, 1:]             # [B, S - 1], [y2, y3, y4, ..., yS-1, yS]
+
+        # Masking (valid_value = 0.0, mask_value = -float("inf"))
+        # Padding masks for multi-head attention
+        src_mask = create_pad_mask(src, pad_id)                                 # [B, 1, 1, L]
+        tgt_input_pad_mask = create_pad_mask(tgt_input, pad_id)                 # [B, 1, 1, S - 1]
+
+        # Decoder causal mask for self-attention
+        tgt_input_causal_mask = create_causal_mask(tgt_input.size(1), device)   # [B, 1, S - 1, S - 1] 
+        # [B, 1, 1, S - 1] + [B, 1, S - 1, S - 1]
+        tgt_input_mask = tgt_input_pad_mask + tgt_input_causal_mask             # [B, 1, S - 1, S - 1]
+
+        # Forward propagation
+        logits = model(src, tgt_input, src_mask, tgt_input_mask)                # [B, S - 1, C]
+        perplexity.update(logits, tgt_output)
+
+        B, S_minus_1, C = logits.shape 
+        logits = logits.reshape(B * S_minus_1, C)                               # [B * (S - 1), C]
+        tgt_out = tgt_output.reshape(B * S_minus_1)                             # [B * (S - 1)]
+
+        # Compute loss
+        loss = criterion(logits, tgt_out)
+        valid_tokens = int((tgt_out != pad_id).sum().item())
+        cross_entropy += loss * valid_tokens
+        n_tokens += valid_tokens
+
+    dataset_cross_entropy = float(cross_entropy / n_tokens)
+    dataset_peplexity_score = float(perplexity.compute().item())
+
+    return dataset_cross_entropy, dataset_peplexity_score
+
+
+@torch.no_grad()
+def validate_with_bleu(
+        model: nn.Module,
+        tokenizer: BPETokenizer,
         dataloader: DataLoader,
         device: torch.device
 ) -> tuple[float, float]:
     model.eval()
 
+    bos_id = tokenizer.bos_id
+    eos_id = tokenizer.eos_id
+    pad_id = tokenizer.pad_id
+
+    criterion = nn.CrossEntropyLoss(ignore_index=pad_id)
+    bleu = BLEUScore()
+
     n_tokens = 0
     cross_entropy = 0.0
 
-    candidate_corpus = []
-    reference_corpus = []
-
     for batch in dataloader:
-        src = batch["src"].to(device)                           # [B, Lq]
-        tgt = batch["tgt"].to(device)                           # [B, Lc]
-
-        # Padding masks for multi-head attention
-        src_pad_mask = batch["src_pad_mask"].to(device)         # [B, Lq]
-        tgt_pad_mask = batch["tgt_pad_mask"].to(device)         # [B, Lc]
-        src_pad_mask = src_pad_mask.unsqueeze(1).unsqueeze(2)   # [B, 1, 1, Lq]
-        tgt_pad_mask = tgt_pad_mask.unsqueeze(1).unsqueeze(2)   # [B, 1, 1, Lc]
+        src = batch["src"].to(device)  # [B, L]
+        tgt = batch["tgt"].to(device)  # [B, S]
 
         # Teacher forcing
-        tgt_input = tgt[:, :-1]                                 # [B, Lc - 1], [y1, y2, y3, ...]
-        tgt_output = tgt[:, 1:]                                 # [B, Lc - 1], [y2, y3, y4, ...]
-        tgt_input_pad_mask = tgt_pad_mask[:, :, :, :-1]         # [B, 1, 1, Lc - 1]
-        logits = model(src, tgt_input, src_pad_mask, tgt_input_pad_mask)
+        # https://en.wikipedia.org/wiki/Teacher_forcing
+        # https://machinelearningmastery.com/teacher-forcing-for-recurrent-neural-networks/
+        tgt_input = tgt[:, :-1]             # [B, S - 1], [y1, y2, y3, ..., yS-1]
+        tgt_output = tgt[:, 1:]             # [B, S - 1], [y2, y3, y4, ..., yS-1, yS]
+
+        # Masking (valid_value = 0.0, mask_value = -float("inf"))
+        # Padding masks for multi-head attention
+        src_mask = create_pad_mask(src, pad_id)                                 # [B, 1, 1, L]
+        tgt_input_pad_mask = create_pad_mask(tgt_input, pad_id)                 # [B, 1, 1, S - 1]
+
+        # Decoder causal mask for self-attention
+        tgt_input_causal_mask = create_causal_mask(tgt_input.size(1), device)   # [B, 1, S - 1, S - 1] 
+        # [B, 1, 1, S - 1] + [B, 1, S - 1, S - 1]
+        tgt_input_mask = tgt_input_pad_mask + tgt_input_causal_mask             # [B, 1, S - 1, S - 1]
+
+        # Forward propagation
+        logits = model(src, tgt_input, src_mask, tgt_input_mask)                # [B, S - 1, C]
+        B, S_minus_1, C = logits.shape 
+        logits = logits.reshape(B * S_minus_1, C)                               # [B * (S - 1), C]
+        tgt_out = tgt_output.reshape(B * S_minus_1)                             # [B * (S - 1)]
 
         # Compute loss
-        B, L, C = logits.shape
-        logits = logits.view(B * L, C).to(torch.float32)
-        tgt_output = tgt_output.reshape(B * L)
-        ce_loss = criterion(logits, tgt_output)
-
-        # Ignore padding token
-        valid_tokens = int((tgt_output != PAD_TOKEN).sum().item())
-        cross_entropy += ce_loss.item() * valid_tokens
+        loss = criterion(logits, tgt_out)
+        valid_tokens = int((tgt_out != pad_id).sum().item())
+        cross_entropy += loss * valid_tokens
         n_tokens += valid_tokens
 
-        # Generate complete translations autoregressively.
-        # Inspired from:
-        # https://machinelearningmastery.com/building-a-transformer-model-for-language-translation/ 
-        pred = model.generate(src, BOS_TOKEN, EOS_TOKEN, PAD_TOKEN, tgt.size(1))     # [B, generated_length]
-        for pred_tokens, tgt_tokens in zip(pred, tgt):
-            pred_text = TOKENIZER.decode(pred_tokens.cpu().tolist(), skip_special_tokens=True)
-            tgt_text = TOKENIZER.decode(tgt_tokens.cpu().tolist(), skip_special_tokens=True)
-            candidate_corpus.append(pred_text.split())
-            reference_corpus.append([tgt_text.split()])
+        # BLEU score
+        # https://lightning.ai/docs/torchmetrics/stable/text/bleu_score.html
+        tokens = model.generate(src, bos_id, eos_id, pad_id)    # [B, generated_length]
+        tokens = tokens.cpu().tolist()
+        targets = tgt.cpu().tolist()
 
-    dataset_cross_entropy = cross_entropy / n_tokens
-    dataset_bleu = bleu_score(candidate_corpus, reference_corpus)
+        pred_texts, target_texts = [], []
+        for pred_tokens, target_tokens in zip(tokens, targets):
+            pred_texts.append(tokenizer.decode(pred_tokens, skip_special_tokens=True))
+            target_texts.append([tokenizer.decode(target_tokens, skip_special_tokens=True)])
+        bleu.update(pred_texts, target_texts)
 
-    return dataset_cross_entropy, dataset_bleu
+    dataset_cross_entropy = float(cross_entropy / n_tokens)
+    bleu_score = 100.0 * float(bleu.compute().item())
+    return dataset_cross_entropy, bleu_score

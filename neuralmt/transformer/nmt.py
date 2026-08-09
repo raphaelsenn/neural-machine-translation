@@ -14,6 +14,7 @@ class NeuralMachineTranslator(nn.Module):
             num_heads: int,
             d_model: int,
             vocab_size: int,
+            max_seq_len: int,
             ff_dim: int,
             dk_dim: int, 
             dv_dim: int,
@@ -22,10 +23,13 @@ class NeuralMachineTranslator(nn.Module):
     ) -> None:
         super().__init__()
 
-        self.embedding = nn.Embedding(vocab_size, d_model, dtype=dtype)
+        self.max_seq_len = max_seq_len
 
-        self.encoder = Encoder(num_layers, num_heads, d_model, ff_dim, dk_dim, dv_dim, p_dropout, dtype)
-        self.decoder = Decoder(num_layers, num_heads, d_model, ff_dim, dk_dim, dv_dim, p_dropout, dtype)
+        self.embedding = nn.Embedding(vocab_size, d_model, dtype=dtype)
+        self.embedding_dropout = nn.Dropout(p_dropout)
+
+        self.encoder = Encoder(num_layers, num_heads, d_model, max_seq_len, ff_dim, dk_dim, dv_dim, p_dropout, dtype)
+        self.decoder = Decoder(num_layers, num_heads, d_model, max_seq_len, ff_dim, dk_dim, dv_dim, p_dropout, dtype)
 
         self.output_layer = nn.Linear(d_model, vocab_size, bias=False, dtype=dtype)
         self.output_layer.weight = self.embedding.weight
@@ -37,13 +41,15 @@ class NeuralMachineTranslator(nn.Module):
             src_mask: torch.Tensor | None = None,
             tgt_mask: torch.Tensor | None = None
     ) -> torch.Tensor:
-        src_emb = self.embedding(src)                                   # [B, Lq, d_model]
-        src_emb = self.encoder(src_emb, src_mask)                       # [B, Lq, d_model]
+        src_emb = self.embedding(src)                                   # [B, L_src, d_model]
+        src_emb = self.embedding_dropout(src_emb)                       # [B, L_src, d_model]
+        src_emb = self.encoder(src_emb, src_mask)                       # [B, L_src, d_model]
 
-        tgt_emb = self.embedding(tgt)                                   # [B, Lc, d_model]
-        tgt_emb = self.decoder(src_emb, tgt_emb, src_mask, tgt_mask)    # [B, Lc, d_model]
+        tgt_emb = self.embedding(tgt)                                   # [B, L_tgt, d_model]
+        tgt_emb = self.embedding_dropout(tgt_emb)                       # [B, L_tgt, d_model]
+        tgt_emb = self.decoder(src_emb, tgt_emb, src_mask, tgt_mask)    # [B, L_tgt, d_model]
 
-        return self.output_layer(tgt_emb)                               # [B, Lc, vocab_size]
+        return self.output_layer(tgt_emb)                               # [B, L_tgt, vocab_size]
 
     @torch.no_grad()
     def generate(
@@ -52,15 +58,15 @@ class NeuralMachineTranslator(nn.Module):
             bos_id: int,
             eos_id: int,
             pad_id: int,
-            max_length: int = 768
     ) -> torch.Tensor:
         # Src padding mask
-        src_pad_mask = src == pad_id                    # [B, L]
-        src_pad_mask = src_pad_mask.unsqueeze(1)        # [B, 1, L]
-        src_pad_mask = src_pad_mask.unsqueeze(2)        # [B, 1, 1, L]
+        src_pad_mask = torch.fill(src == pad_id, float("-inf")) # [B, L]
+        src_pad_mask = src_pad_mask.unsqueeze(1)                # [B, 1, L]
+        src_pad_mask = src_pad_mask.unsqueeze(2)                # [B, 1, 1, L]
 
         # Shape of src: [B, L]
         src_emb = self.embedding(src)                   # [B, L, d_model]
+        src_emb = self.embedding_dropout(src_emb)       # [B, L, d_model]
         src_emb = self.encoder(src_emb, src_pad_mask)   # [B, L, d_model]
 
         # Prepare output tensor
@@ -72,8 +78,9 @@ class NeuralMachineTranslator(nn.Module):
         # Inspired from: 
         # https://machinelearningmastery.com/building-a-transformer-model-for-language-translation/
         # https://github.com/karpathy/minGPT/blob/master/mingpt/model.py 
-        for _ in range(max_length - 1):
+        for _ in range(self.max_seq_len - 1):
             tgt_emb = self.embedding(tgt)                           # [B, T, d_model]
+            tgt_emb = self.embedding_dropout(tgt_emb)               # [B, T, d_model]
             tgt_emb = self.decoder(src_emb, tgt_emb, src_pad_mask)  # [B, T, d_model]
             logits = self.output_layer(tgt_emb)                     # [B, T, vocab_size]
             pred_token = torch.argmax(logits[:, -1, :], dim=-1)     # [B]

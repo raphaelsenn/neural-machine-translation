@@ -228,3 +228,10 @@ __marimo__/
 # Ingore following directories
 .vscode
 wmt14
+
+# Ignore those file types
+*.DS_Store
+*.pt
+*.pth
+*.csv
+*.pickle

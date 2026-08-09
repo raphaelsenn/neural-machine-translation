@@ -4,6 +4,15 @@ import torch
 import torch.nn as nn
 
 
+def rotate_half(x):
+    x1, x2 = x.chunk(2, dim=-1)
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(x, cos, sin):
+    return (x * cos) + (rotate_half(x) * sin)
+
+
 class RoPE(nn.Module):
     """
     Rotary Positional Embedding
@@ -13,34 +22,28 @@ class RoPE(nn.Module):
     RoFormer: Enhanced Transformer with Rotary Position Embedding,
     https://arxiv.org/abs/2104.09864
     """
-    def __init__(self, d_model: int, base=10000.0, dtype: Any | None = None):
+    def __init__(self, d_model: int, max_seq_len: int = 768, dtype: Any | None = None) -> None:
         super().__init__()
-        self.d_model = d_model
-        self.dtype = dtype
-
-        theta = 1.0 / (base ** (torch.arange(0, d_model, 2).to(self.dtype) / d_model))
-        self.register_buffer("theta", theta)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        L, D = x.shape[-2:]
 
         # NOTE: This implementation is based on the implementation from:
-        # https://wangkuiyi.github.io/rope.html
+        # https://machinelearningmastery.com/building-a-transformer-model-for-language-translation/
 
         # Read more about Rotary Positional Embedding here:
         # https://arxiv.org/abs/2104.09864 
-        positions = torch.arange(L, device=x.device, dtype=self.dtype) # [0, 1, 2 ... L]
 
-        angles = torch.outer(positions, self.theta)
-        angles = torch.cat([angles, angles], dim=-1)
+        N = 10000
+        inv_freq = 1. / (N ** (torch.arange(0, d_model, 2).to(dtype) / d_model))
+        position = torch.arange(max_seq_len).float()
+        inv_freq = torch.cat((inv_freq, inv_freq), dim=-1)
+        sinusoid_inp = torch.outer(position, inv_freq)
+        self.register_buffer("cos", sinusoid_inp.cos())
+        self.register_buffer("sin", sinusoid_inp.sin())
+ 
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: [B, num_heads, L, dk]
+        seq_len = x.size(-2)
 
-        # Make them broadcastable to [..., L, D]
-        angles = angles.view(*([1] * (x.ndim - 2)), L, D)
+        cos = self.cos[:seq_len].view(1, 1, seq_len, -1)
+        sin = self.sin[:seq_len].view(1, 1, seq_len, -1)
 
-        sin = torch.sin(angles)   # Consider cache it. 
-        cos = torch.cos(angles)
-
-        xu, xd = x.chunk(2, dim=-1)
-        hatx = torch.cat([-xd, xu], dim=-1)
-
-        return x * cos + hatx * sin
+        return apply_rotary_pos_emb(x, cos, sin)

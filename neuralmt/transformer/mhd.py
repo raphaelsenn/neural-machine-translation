@@ -19,8 +19,11 @@ class MultiHeadAttention(nn.Module):
             self, 
             d_model: int,
             num_heads: int,
+            max_seq_len: int,
             dk_dim: int,
             dv_dim: int,
+            p_dropout: float,
+            rope: bool = False,
             dtype: Any | None = None
     ) -> None:
         super().__init__()
@@ -33,9 +36,10 @@ class MultiHeadAttention(nn.Module):
         self.q_layer = nn.Linear(d_model, dk_dim * num_heads, bias=False, dtype=dtype)
         self.k_layer = nn.Linear(d_model, dk_dim * num_heads, bias=False, dtype=dtype)
         self.v_layer = nn.Linear(d_model, dv_dim * num_heads, bias=False, dtype=dtype)
-        self.mhd_layer = nn.Linear(num_heads * dv_dim, d_model, bias=False, dtype=dtype)
+        self.out_proj = nn.Linear(num_heads * dv_dim, d_model, bias=False, dtype=dtype)
 
-        self.rope = RoPE(dk_dim, dtype=dtype)
+        self.dropout = nn.Dropout(p_dropout)
+        self.rope = RoPE(dk_dim, max_seq_len, dtype) if rope is True else nn.Identity()
 
     def forward(
             self, 
@@ -68,19 +72,21 @@ class MultiHeadAttention(nn.Module):
         # [B, num_heads, Lq, dk] @ [B, num_heads, dk, Lc]
         logits = Q @ K.transpose(-2, -1)                   # [B, num_heads, Lq, Lc]
 
+        # mask has shape:                                  # [B, 1, Lq, Lc]
         if mask is not None:
-            logits = logits.masked_fill(mask == 0, float("-inf"))
+            logits = logits + mask                         # [B, num_heads, Lq, Lc]
 
         # Scaled dot-product attention
         scale = self.dk_dim**(-0.5)
-        probs = torch.softmax(scale * logits, dim=-1)# [B, num_heads, Lq, Lc]
-        attention = probs @ V                               # [B, num_heads, Lq, dv]
+        attn_weight = torch.softmax(scale * logits, dim=-1)     # [B, num_heads, Lq, Lc]
+        attn_weight = self.dropout(attn_weight)
+        attn_weight = attn_weight @ V                           # [B, num_heads, Lq, dv]
 
-        attention = attention.transpose(1, 2).contiguous()  # [B, Lq, num_heads, dv]
-        attention = attention.view(
+        attn_weight = attn_weight.transpose(1, 2).contiguous()  # [B, Lq, num_heads, dv]
+        attn_weight = attn_weight.view(
             B, Lq, self.num_heads * self.dv_dim
-        )                                                   # [B, Lq, num_heads * dv]
+        )                                                       # [B, Lq, num_heads * dv]
 
         # Computing multihead attention
-        mhd = self.mhd_layer(attention)                     # [B, Lq, d_model]
+        mhd = self.out_proj(attn_weight)                        # [B, Lq, d_model]
         return mhd

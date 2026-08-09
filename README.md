@@ -2,36 +2,79 @@
 
 ## Usage
 
-The WMT14 German to Englisch Machine Translation dataset can be downloaded here:
+The Multi30k German-Englisch Machine Translation dataset can be downloaded here:
 
-[WMT 2014 Englisch-German](https://www.kaggle.com/datasets/mohamedlotfy50/wmt-2014-english-german?select=wmt14_translate_de-en_train.csv)
+[Multi30k](https://huggingface.co/datasets/bentrevett/multi30k)
 
+#### Inference
 
-### Inference
+Download the tokenizer file from:
 
-Download the tokenizer file from: 
+[tokenizer_de_en_vocab8k.pickle]()
 
-Download the weight of the NMT model from:
+Download the pretrained NMT model weights from:
+
+[nmt_en2de_48.2M_vocab8k.pt]()
 
 ```python
-tokenizer = Tokenizer.from_file(TOKENIZER_FILE)
-nmt = NeuralMachineTranslator()
+import torch
 
+from neuralmt import BPETokenizer
+from neuralmt import NeuralMachineTranslator
+
+# Load tokenizer
+TOKENIZER_FILE = "tokenizer_de_en_vocab8k.pickle"
+tokenizer = BPETokenizer.load(TOKENIZER_FILE)
+bos_id = tokenizer.bos_id
+eos_id = tokenizer.eod_id
+pad_id = tokenizer.pad_id
+
+# Load neural machine translation model
+NMT_WEIGHTS_FILE = "nmt_en2de_48.2M_vocab8k.pt"
+nmt = torch.load(model_file, map_location="cpu", weights_only=False)
+nmt.eval()
+
+# Inference
+src = "A man driving his car."                              # string
+tokens_src = tokenizer.encode(source)                       # list of n ints
+tokens_src = torch.as_tensor(tokens, dtype=torch.int64)     # tensor of shape [n]
+tokens_src = tokens_source.unsqueeze(0)                     # tensor of shape [1, n]
+
+tokens_tgt = nmt.generate(tokens_src)                       # tensor of shape [1, generated_length]
+tokens_tgt = tokens_tgt.squeeze(0)                          # tensor of shape [generated_length]
+tokens_tgt = tokens_tgt.detach().tolist()                   # list of generated_length ints
+tgt = tokenizer.decode(tokens_tgt.detach().tolist(), True)  # string
+
+print(tgt)  # "Ein Mann fährt sein Auto."
 ```
 
-### Training
+#### Training
 
-#### 1. Train Byte Pair Encoding Tokenizer
+##### 1. Train Byte Pair Encoding Tokenizer
 
 ```bash
 python3 train_bpe.py
 ```
 
-#### 2. Train the Neural-Machine-Translator
+##### 2. Train the Neural-Machine-Translator
 
 ```bash
 python3 train.py
 ```
+
+## Evaluation
+
+<p align="center">
+  <img src="./assets/loss_ppl_en2de.png">
+</p>
+
+<p align="center"> <em>Figure 1: Training, validation loss (left) and perplexity (right) on Multi30k englisch-to-german task.</em> </p>
+
+
+| Task | Parameters | Cross-Entropy | Perplexity | BLEU |
+|---|---:|---:|---:|---:|
+| English to German (test set) | 48.2M | 1.7394 | 5.6939 | 34.1119 |
+
 
 ## Citations
 
@@ -54,5 +97,14 @@ python3 train.py
       archivePrefix={arXiv},
       primaryClass={cs.CL},
       url={https://arxiv.org/abs/1706.03762}, 
+}
+
+@article{elliott-EtAl:2016:VL16,
+ author    = {{Elliott}, D. and {Frank}, S. and {Sima'an}, K. and {Specia}, L.},
+ title     = {Multi30K: Multilingual English-German Image Descriptions},
+ booktitle = {Proceedings of the 5th Workshop on Vision and Language},
+ year      = {2016},
+ pages     = {70--74},
+ year      = 2016
 }
 ```
