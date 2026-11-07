@@ -1,4 +1,9 @@
-# Neural Machine Translation
+# Neural Machine Translation (NeuralMT)
+
+* PyTorch implementation of an encoder-decoder Transformer [1]
+* Byte-pair encoding (BPE) tokenizer implemented from scratch
+* Multi-head attention (MHA) [1] and rotary positional embeddings (RoPE) [2]
+* Achieved BLEU scores of 34.11 (en2de) and 34.73 (de2en) (Multi30k) [3]
 
 ## Architecture
 
@@ -15,7 +20,7 @@ Transformer architecture used in this repository:
   </em>
 </p>
 
-Figure 1 shows 4 layers and grouped-query attention (GQA), while the implementation in this repo uses 6 encoder-decoder layers and multi-head attention (MHA).
+**NOTE:** Figure 1 shows 4 layers and grouped-query attention (GQA), while the implementation in this repo uses 6 encoder-decoder layers and multi-head attention (MHA).
 
 ## Usage
 
@@ -52,7 +57,7 @@ nmt = torch.load(model_file, map_location="cpu", weights_only=False)
 nmt.eval()
 
 # Inference
-src = "A man driving his car."                              # string
+src = "Leute, die vor einem Gebäude stehen."                # string
 tokens_src = tokenizer.encode(source)                       # list of n ints
 tokens_src = torch.as_tensor(tokens, dtype=torch.int64)     # tensor of shape [n]
 tokens_src = tokens_source.unsqueeze(0)                     # tensor of shape [1, n]
@@ -62,7 +67,7 @@ tokens_tgt = tokens_tgt.squeeze(0)                          # tensor of shape [g
 tokens_tgt = tokens_tgt.detach().tolist()                   # list of generated_length ints
 tgt = tokenizer.decode(tokens_tgt.detach().tolist(), True)  # string
 
-print(tgt)  # "Ein Mann fährt sein Auto."
+print(tgt)  # "People standing in front of a building."
 ```
 
 #### Training
