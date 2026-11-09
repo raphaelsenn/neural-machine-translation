@@ -72,13 +72,13 @@ print(tgt)  # "People standing in front of a building."
 
 #### Training
 
-##### 1. Train Byte Pair Encoding Tokenizer
+##### 1. Train Byte Pair Encoding Tokenizer:
 
 ```bash
 python3 train_bpe.py
 ```
 
-##### 2. Train the Neural-Machine-Translator
+##### 2. Train the Transformer Model:
 
 ```bash
 python3 train.py
